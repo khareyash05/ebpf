@@ -1,42 +1,45 @@
-package main
+package hello
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
-	ebpf "github.com/aquasecurity/tracee/libbpfgo"
-)
-
-const (
-	port = 4040
+	"github.com/cilium/ebpf"
 )
 
 func main() {
-	// Load the eBPF program
-	module, err := ebpf.NewModuleFromFile("main.c")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading eBPF program: %v\n", err)
-		os.Exit(1)
-	}
+	bpfModule, err := ebpf.LoadCollection("hello.bpf.o")
+	defer bpfModule.Close()
 
 	// Attach the eBPF program to the network interface (replace "eth0" with your network interface)
-	prog, err := module.GetProgram("drop_packet")
+	prog := bpfModule.GetProgram("hello")
 	if prog == nil {
 		fmt.Fprintln(os.Stderr, "Error finding eBPF program")
-		module.Close()
 		os.Exit(1)
 	}
 
 	link, err := ebpf.AttachXDP("eth0", prog)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error attaching eBPF program: %v\n", err)
-		module.Close()
 		os.Exit(1)
 	}
 
-	fmt.Printf("eBPF program attached. Dropping TCP packets on port %d\n", port)
+	objs := bpfObjects{}
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("loading objects: %v", err)
+	}
+	defer objs.Close()
+
+	kp, err := link.Kprobe("sys_execve", objs.KprobeExecve, nil)
+	if err != nil {
+		log.Fatalf("opening kprobe: %s", err)
+	}
+	defer kp.Close()
+
+	fmt.Println("Hello, eBPF!")
 
 	// Setup signal handling for graceful exit
 	sig := make(chan os.Signal, 1)
@@ -47,5 +50,4 @@ func main() {
 
 	// Detach the eBPF program on exit
 	link.Detach()
-	module.Close()
 }

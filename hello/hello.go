@@ -17,7 +17,7 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 
-	b, err := bpf.NewModuleFromFile("new.c")
+	b, err := bpf.NewModuleFromFile("hello.bpf.c")
 	must(err)
 	defer b.Close()
 
