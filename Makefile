@@ -1,28 +1,42 @@
-ARCH=$(shell uname -m)
+APP=exec_scrape
 
-TARGET := hello
-TARGET_BPF := $(TARGET).bpf.o
+.PHONY: build
+build: gen $(APP)
 
-GO_SRC := *.go
-BPF_SRC := *.bpf.c
+.PHONY: run
+run: build
+	sudo ./$(APP)
 
-LIBBPF_HEADERS := /usr/include/bpf
-LIBBPF_OBJ := /usr/lib/$(ARCH)-linux-gnu/libbpf.a
+.PHONY: gen
+gen: sum vmlinux src/gen_execve_bpfel.go
 
-.PHONY: all
-all: $(TARGET) $(TARGET_BPF)
+.PHONY: vmlinux
+vmlinux: src/bpf/vmlinux.h
 
-go_env := CC=clang CGO_CFLAGS="-I $(LIBBPF_HEADERS)" CGO_LDFLAGS="$(LIBBPF_OBJ)"
-$(TARGET): $(GO_SRC)
-	$(go_env) go build -o $(TARGET) 
+.PHONY: sum
+sum: go.sum
 
-$(TARGET_BPF): $(BPF_SRC)
-	clang \
-		-I /usr/include/$(ARCH)-linux-gnu \
-		-O2 -c -target bpf \
-		-o $@ $<
+.PHONY: fmt
+fmt: sum
+	go fmt src/*.go
 
 .PHONY: clean
 clean:
-	go clean
-	
+	-rm $(APP)
+	-rm src/gen*
+	-rm src/bpf/vmlinux.h
+	-rm go.sum
+	sed 's/v.*/latest/g' -i go.mod
+
+$(APP): src/main.go src/gen_execve_bpfel.go
+	CGO_ENABLED=0 go build -o $(APP) src/*.go
+
+src/bpf/vmlinux.h:
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > src/bpf/vmlinux.h
+
+src/gen_execve_bpfel.go: src/bpf/execve.bpf.c
+	go generate src/*.go
+
+go:
+	go get github.com/cilium/ebpf
+	go get github.com/cilium/ebpf/internal/unix
