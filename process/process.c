@@ -35,11 +35,13 @@ int allow_specific_port(struct xdp_md *ctx) {
     bpf_get_current_comm(&comm, sizeof(comm));
 
     char *process_name = bpf_map_lookup_elem(&process_names, 1); // look into the map for process name passed by the user
+    if(process_name == NULL) return XDP_ABORTED;
     if (bpf_strcmp(*process_name,comm)==0) {
         // Process name not same, drop the packet
         return XDP_DROP;
     }
     int port = bpf_map_lookup_elem(&port_names, 1); // get port number mentioned by user
+    if(port == NULL) return XDP_ABORTED;
 
     void *data_end = (void*)(long)ctx->data_end;
     void*data = (void*)(long)ctx->data;

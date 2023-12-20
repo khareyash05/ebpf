@@ -66,6 +66,7 @@ func main() {
 }
 
 func addPortToMap(m *ebpf.Map, port int) error {
+	// https://pkg.go.dev/github.com/cilium/ebpf#Map.Put
 	err := m.Put(1, port)
 	if err != nil {
 		return err
